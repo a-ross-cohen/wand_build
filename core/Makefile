@@ -790,6 +790,9 @@ $(TARGET_PREBUILT_KERNEL): $(TARGET_KERNEL_CONFIGURE)
 	$(MAKE) -C kernel_imx -j$(HOST_PROCESSOR) uImage $(KERNEL_ENV)
 	install -D $(KERNEL_UIMAGE)  $(PRODUCT_OUT)/uImage
 	install -D $(KERNEL_ZIMAGE)  $(PRODUCT_OUT)/kernel
+ifneq ($(TARGET_KERNEL_MODULES), )
+	$(MAKE) -C kernel_imx -j$(HOST_PROCESSOR) modules $(KERNEL_ENV)
+endif
 
 else
 kernelimage:
