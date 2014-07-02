@@ -739,10 +739,20 @@ endif
 
 .PHONY: bootloader
 ifneq ($(strip $(TARGET_BOOTLOADER_CONFIG)),)
+
+ifeq ($(shell uname -s), Linux)
 BOOTLOADER_CROSS_TOOLCHAIN := `pwd`/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
-BOOTLOADER_ENV := ARCH=arm CROSS_COMPILE=$(BOOTLOADER_CROSS_TOOLCHAIN)
 HOST_PROCESSOR := $(shell cat /proc/cpuinfo | grep processor | wc -l)
-TARGET_BOOTLOADER_IMAGE := $(PRODUCT_OUT)/u-boot.bin
+INSTALL_FLAGS := -D
+endif
+
+ifeq ($(shell uname -s), Darwin)
+BOOTLOADER_CROSS_TOOLCHAIN := `pwd`/prebuilts/gcc/darwin-x86/arm/arm-eabi-4.6/bin/arm-eabi-
+HOST_PROCESSOR := $(shell sysctl -n hw.ncpu)
+endif
+
+BOOTLOADER_ENV := ARCH=arm CROSS_COMPILE=$(BOOTLOADER_CROSS_TOOLCHAIN)
+TARGET_BOOTLOADER_IMAGE := $(PRODUCT_OUT)/boot/u-boot.img
 
 BOOTLOADER_PATH := bootable/bootloader/uboot-imx/
 BOOTLOADER_CONFIG_FILE := $(BOOTLOADER_PATH)/include/config.h
@@ -750,14 +760,15 @@ BOOTLOADER_CONFIG_FILE := $(BOOTLOADER_PATH)/include/config.h
 bootloader: $(TARGET_BOOTLOADER_IMAGE)
 
 $(TARGET_BOOTLOADER_IMAGE):
+	mkdir -p $(PRODUCT_OUT)/boot
 	@for ubootplat in $(TARGET_BOOTLOADER_CONFIG); do \
 		UBOOT_PLATFORM=`echo $$ubootplat | cut -d':' -f1`; \
 		UBOOT_CONFIG=`echo $$ubootplat | cut -d':' -f2`; \
-		$(MAKE) -C bootable/bootloader/uboot-imx/ distclean $(BOOTLOADER_ENV); \
-		$(MAKE) -C bootable/bootloader/uboot-imx/ $$UBOOT_CONFIG $(BOOTLOADER_ENV); \
-		$(MAKE) -C bootable/bootloader/uboot-imx/ $(BOOTLOADER_ENV); \
-		install -D bootable/bootloader/uboot-imx/u-boot.bin $(PRODUCT_OUT)/u-boot-$$UBOOT_PLATFORM.bin; \
-		install -D bootable/bootloader/uboot-imx/u-boot.bin $@; \
+		$(MAKE) -C $(BOOTLOADER_PATH) distclean $(BOOTLOADER_ENV); \
+		$(MAKE) -C $(BOOTLOADER_PATH) $$UBOOT_CONFIG $(BOOTLOADER_ENV); \
+		$(MAKE) -C $(BOOTLOADER_PATH) $(BOOTLOADER_ENV); \
+		install $(INSTALL_FLAGS) $(BOOTLOADER_PATH)/u-boot.img $(TARGET_BOOTLOADER_IMAGE); \
+		install $(INSTALL_FLAGS) $(BOOTLOADER_PATH)/SPL $(PRODUCT_OUT)/boot/SPL; \
 	done
 else
 bootloader:
@@ -765,11 +776,21 @@ endif
 
 .PHONY: kernelimage
 ifneq ($(strip $(TARGET_NO_KERNEL)),true)
+
+ifeq ($(shell uname -s), Linux)
 KERNEL_CROSS_TOOLCHAIN := `pwd`/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
-KERNEL_ENV := ARCH=arm CROSS_COMPILE=$(KERNEL_CROSS_TOOLCHAIN)
 HOST_PROCESSOR := $(shell cat /proc/cpuinfo | grep processor | wc -l)
-INSTALLED_KERNEL_TARGET := $(PRODUCT_OUT)/kernel
-TARGET_PREBUILT_KERNEL := $(PRODUCT_OUT)/kernel
+INSTALL_FLAGS := -D
+endif
+
+ifeq ($(shell uname -s), Darwin)
+KERNEL_CROSS_TOOLCHAIN := `pwd`/prebuilts/gcc/darwin-x86/arm/arm-eabi-4.6/bin/arm-eabi-
+HOST_PROCESSOR := $(shell sysctl -n hw.ncpu)
+endif
+
+KERNEL_ENV := ARCH=arm CROSS_COMPILE=$(KERNEL_CROSS_TOOLCHAIN)
+INSTALLED_KERNEL_TARGET := $(PRODUCT_OUT)/boot/uImage
+TARGET_PREBUILT_KERNEL := $(PRODUCT_OUT)/boot/uImage
 KERNEL_CONFIGURE := kernel_imx/.config
 TARGET_KERNEL_CONFIGURE := $(PRODUCT_OUT)/.config
 KERNEL_ZIMAGE    := kernel_imx/arch/arm/boot/zImage
@@ -784,12 +805,11 @@ $(KERNEL_CONFIGURE): kernel_imx/arch/arm/configs/$(TARGET_KERNEL_DEFCONF)
 
 $(TARGET_KERNEL_CONFIGURE): kernel_imx/arch/arm/configs/$(TARGET_KERNEL_DEFCONF) $(KERNEL_CONFIGURE)
 	$(MAKE) -C kernel_imx $(TARGET_KERNEL_DEFCONF) $(KERNEL_ENV)
-	install -D $(KERNEL_CONFIGURE) $(TARGET_KERNEL_CONFIGURE)
+	install $(INSTALL_FLAGS) $(KERNEL_CONFIGURE) $(TARGET_KERNEL_CONFIGURE)
 
 $(TARGET_PREBUILT_KERNEL): $(TARGET_KERNEL_CONFIGURE)
-	$(MAKE) -C kernel_imx -j$(HOST_PROCESSOR) uImage $(KERNEL_ENV)
-	install -D $(KERNEL_UIMAGE)  $(PRODUCT_OUT)/uImage
-	install -D $(KERNEL_ZIMAGE)  $(PRODUCT_OUT)/kernel
+	export PATH=/usr/local/opt/coreutils/libexec/gnubin:$$PATH ; $(MAKE) -C kernel_imx -j$(HOST_PROCESSOR) uImage $(KERNEL_ENV)
+	install $(INSTALL_FLAGS) $(KERNEL_UIMAGE)  $(INSTALLED_KERNEL_TARGET)
 ifneq ($(TARGET_KERNEL_MODULES), )
 	$(MAKE) -C kernel_imx -j$(HOST_PROCESSOR) modules $(KERNEL_ENV)
 endif
